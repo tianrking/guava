@@ -732,6 +732,24 @@ public class UninterruptiblesTest extends TestCase {
     }
   }
 
+  @SuppressWarnings("WaitNotInLoop") // see comment on the other Condition tests
+  public void testConditionAwaitMinimumTimeoutInterrupted() {
+    Lock lock = new ReentrantLock();
+    Condition condition =
+        new TestCondition(lock, lock.newCondition()) {
+          @Override
+          public boolean await(long time, TimeUnit unit) throws InterruptedException {
+            // Interrupt after awaitUninterruptibly clears any preexisting interrupt.
+            Thread.currentThread().interrupt();
+            return super.await(time, unit);
+          }
+        };
+    assertFalse(awaitUninterruptibly(condition, Long.MIN_VALUE, NANOSECONDS));
+    assertTrue(Thread.currentThread().isInterrupted());
+    assertFalse(awaitUninterruptibly(condition, Duration.ofSeconds(Long.MIN_VALUE)));
+    assertTrue(Thread.currentThread().isInterrupted());
+  }
+
   public void testMinimumTimeoutAlreadyAvailableInterrupted() throws Exception {
     Thread.currentThread().interrupt();
     assertTrue(awaitUninterruptibly(new CountDownLatch(0), Long.MIN_VALUE, NANOSECONDS));
