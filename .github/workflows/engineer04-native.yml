@@ -38,7 +38,7 @@ jobs:
           base = '74fb73b20e17e1b3fa072d7754af493217f86781'
           files = ['guava/src/com/google/common/util/concurrent/Uninterruptibles.java', 'guava-tests/test/com/google/common/util/concurrent/UninterruptiblesTest.java']
           def format_source(source):
-              return subprocess.check_output(['java', '-jar', '/tmp/format.jar'], input=source.encode()).decode()
+              return subprocess.check_output(['java', '-jar', '/tmp/format.jar', '-'], input=source.encode()).decode()
           def formatting_delta(source, formatted):
               return [line for line in difflib.unified_diff(source.splitlines(), formatted.splitlines(), n=0) if not line.startswith(('---', '+++', '@@'))]
           for file in files:
@@ -52,6 +52,30 @@ jobs:
               print('Formatting verified for changed code:', file)
               print('Unchanged baseline formatting delta:', baseline_delta)
           PY
+      - name: Native RED with exact formal tests and baseline production
+        run: |
+          git restore --source=74fb73b20e17e1b3fa072d7754af493217f86781 -- guava/src/com/google/common/util/concurrent/Uninterruptibles.java
+          echo 'BASELINE_PRODUCTION=74fb73b20e17e1b3fa072d7754af493217f86781; TEST_SOURCE=95e925d7c809caf1b1900e569802d656c5b80f56'
+          sha256sum guava/src/com/google/common/util/concurrent/Uninterruptibles.java guava-tests/test/com/google/common/util/concurrent/UninterruptiblesTest.java
+          set +e
+          ./mvnw -B -Dtoolchain.skip clean package -Dtest='UninterruptiblesTest#test*Minimum*' -DfailIfNoTests=false -Dsurefire.failIfNoSpecifiedTests=false -Dmaven.javadoc.skip -Dsurefire.toolchain.version=25 > /tmp/final-red.log 2>&1
+          red_exit=$?
+          set -e
+          cat /tmp/final-red.log
+          echo "ORIGINAL_NATIVE_RED_EXIT=$red_exit"
+          test "$red_exit" -ne 0
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          suite = ET.parse('guava-tests/target/surefire-reports/TEST-com.google.common.util.concurrent.UninterruptiblesTest.xml').getroot()
+          assert [int(suite.get(k, 0)) for k in ('tests', 'failures', 'errors', 'skipped')] == [7, 6, 0, 0], suite.attrib
+          expected = {'testAwaitMinimumTimeoutInterrupted', 'testGetMinimumTimeoutInterrupted', 'testTryAcquireMinimumTimeoutInterrupted', 'testTryLockMinimumTimeoutInterrupted', 'testAwaitTerminationMinimumTimeoutInterrupted', 'testConditionAwaitMinimumTimeoutInterrupted'}
+          failed = {case.get('name') for case in suite.findall('testcase') if case.find('failure') is not None}
+          assert failed == expected, failed
+          print('Exact formal regression RED verified: 7 tests, expected 6 failures, 0 errors, 0 skipped.')
+          PY
+          git restore --source=95e925d7c809caf1b1900e569802d656c5b80f56 -- guava/src/com/google/common/util/concurrent/Uninterruptibles.java
+          git diff --exit-code
+          sha256sum guava/src/com/google/common/util/concurrent/Uninterruptibles.java guava-tests/test/com/google/common/util/concurrent/UninterruptiblesTest.java
       - name: Native complete focused tests on JDK 8
         run: ./mvnw -B -Dtoolchain.skip clean package -Dtest='UninterruptiblesTest,UninterruptibleFutureTest' -DfailIfNoTests=false -Dsurefire.failIfNoSpecifiedTests=false -Dmaven.javadoc.skip -Dsurefire.toolchain.version=8
       - name: Native complete focused tests on JDK 25
