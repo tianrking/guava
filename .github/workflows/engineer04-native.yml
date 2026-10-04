@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 597a50f4a5ef5c9ab588891924e85103462d0bc2
+          ref: 6e3aed1f413514d3794a78aa5021fbfc8c566c8b
           persist-credentials: false
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
         with:
@@ -25,7 +25,7 @@ jobs:
           git show -s --format='%H%n%an <%ae>%n%cn <%ce>' HEAD
           sha256sum guava/src/com/google/common/util/concurrent/Uninterruptibles.java guava-tests/test/com/google/common/util/concurrent/UninterruptiblesTest.java
       - name: Native RED regression on original production
-        run: ./mvnw -B -Dtoolchain.skip clean package -Dtest='UninterruptiblesTest#test*Minimum*' -DfailIfNoTests=false -Dmaven.javadoc.skip -Dsurefire.toolchain.version=25
+        run: ./mvnw -B -Dtoolchain.skip clean package -Dtest='UninterruptiblesTest#test*Minimum*' -DfailIfNoTests=false -Dsurefire.failIfNoSpecifiedTests=false -Dmaven.javadoc.skip -Dsurefire.toolchain.version=25
       - name: Print Surefire reports
         if: always()
         run: ./util/print_surefire_reports.sh
