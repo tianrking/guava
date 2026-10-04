@@ -7,15 +7,16 @@ permissions:
 jobs:
   native:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 410aba7ea2b1e2b889b2a36733a79b417257219e
+          ref: ae44a1fcca96766a02efe5093547e14b331ef099
           persist-credentials: false
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
         with:
           java-version: |
+            8
             25
             26
           distribution: temurin
@@ -24,8 +25,27 @@ jobs:
           git rev-parse HEAD
           git show -s --format='%H%n%an <%ae>%n%cn <%ce>' HEAD
           sha256sum guava/src/com/google/common/util/concurrent/Uninterruptibles.java guava-tests/test/com/google/common/util/concurrent/UninterruptiblesTest.java
-      - name: Native RED regression on original production
-        run: ./mvnw -B -Dtoolchain.skip clean package -Dtest='UninterruptiblesTest#test*Minimum*' -DfailIfNoTests=false -Dsurefire.failIfNoSpecifiedTests=false -Dmaven.javadoc.skip -Dsurefire.toolchain.version=25
+      - name: Verify Google Java Format 1.37.0
+        run: |
+          curl --fail --location https://github.com/google/google-java-format/releases/download/v1.37.0/google-java-format-1.37.0-all-deps.jar --output /tmp/format.jar
+          echo '834b2a0c38cb774953322a84b5ca3f2f40dd3156650b3cd44d3b744345962f7a  /tmp/format.jar' | sha256sum --check
+          result=0
+          for source in guava/src/com/google/common/util/concurrent/Uninterruptibles.java guava-tests/test/com/google/common/util/concurrent/UninterruptiblesTest.java; do
+            java -jar /tmp/format.jar "$source" > "/tmp/$(basename "$source")"
+            diff -u "$source" "/tmp/$(basename "$source")" || result=1
+          done
+          exit "$result"
+      - name: Native complete focused tests on JDK 8
+        run: ./mvnw -B -Dtoolchain.skip clean package -Dtest='UninterruptiblesTest,UninterruptibleFutureTest' -DfailIfNoTests=false -Dsurefire.failIfNoSpecifiedTests=false -Dmaven.javadoc.skip -Dsurefire.toolchain.version=8
+      - name: Native complete focused tests on JDK 25
+        run: ./mvnw -B -Dtoolchain.skip package -Dtest='UninterruptiblesTest,UninterruptibleFutureTest' -DfailIfNoTests=false -Dsurefire.failIfNoSpecifiedTests=false -Dmaven.javadoc.skip -Dsurefire.toolchain.version=25
+      - name: Official full clean package on JDK 25
+        run: ./mvnw -B -Dtoolchain.skip clean package -Dsurefire.toolchain.version=25
+      - name: Verify source unchanged after tests
+        run: |
+          test "$(git rev-parse HEAD)" = ae44a1fcca96766a02efe5093547e14b331ef099
+          git diff --exit-code
+          sha256sum guava/src/com/google/common/util/concurrent/Uninterruptibles.java guava-tests/test/com/google/common/util/concurrent/UninterruptiblesTest.java
       - name: Print Surefire reports
         if: always()
         run: ./util/print_surefire_reports.sh
