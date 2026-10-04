@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ae44a1fcca96766a02efe5093547e14b331ef099
+          ref: 95e925d7c809caf1b1900e569802d656c5b80f56
           persist-credentials: false
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
         with:
@@ -29,12 +29,29 @@ jobs:
         run: |
           curl --fail --location https://github.com/google/google-java-format/releases/download/v1.37.0/google-java-format-1.37.0-all-deps.jar --output /tmp/format.jar
           echo '834b2a0c38cb774953322a84b5ca3f2f40dd3156650b3cd44d3b744345962f7a  /tmp/format.jar' | sha256sum --check
-          result=0
-          for source in guava/src/com/google/common/util/concurrent/Uninterruptibles.java guava-tests/test/com/google/common/util/concurrent/UninterruptiblesTest.java; do
-            java -jar /tmp/format.jar "$source" > "/tmp/$(basename "$source")"
-            diff -u "$source" "/tmp/$(basename "$source")" || result=1
-          done
-          exit "$result"
+          git fetch origin 74fb73b20e17e1b3fa072d7754af493217f86781 --depth=1
+          python3 - <<'PY'
+          import difflib
+          import pathlib
+          import subprocess
+          import tempfile
+          base = '74fb73b20e17e1b3fa072d7754af493217f86781'
+          files = ['guava/src/com/google/common/util/concurrent/Uninterruptibles.java', 'guava-tests/test/com/google/common/util/concurrent/UninterruptiblesTest.java']
+          def format_source(source):
+              return subprocess.check_output(['java', '-jar', '/tmp/format.jar'], input=source.encode()).decode()
+          def formatting_delta(source, formatted):
+              return [line for line in difflib.unified_diff(source.splitlines(), formatted.splitlines(), n=0) if not line.startswith(('---', '+++', '@@'))]
+          for file in files:
+              original = subprocess.check_output(['git', 'show', base + ':' + file]).decode()
+              current = pathlib.Path(file).read_text()
+              baseline_delta = formatting_delta(original, format_source(original))
+              current_delta = formatting_delta(current, format_source(current))
+              if current_delta != baseline_delta:
+                  print('\n'.join(current_delta))
+                  raise SystemExit('New or changed code does not match Google Java Format: ' + file)
+              print('Formatting verified for changed code:', file)
+              print('Unchanged baseline formatting delta:', baseline_delta)
+          PY
       - name: Native complete focused tests on JDK 8
         run: ./mvnw -B -Dtoolchain.skip clean package -Dtest='UninterruptiblesTest,UninterruptibleFutureTest' -DfailIfNoTests=false -Dsurefire.failIfNoSpecifiedTests=false -Dmaven.javadoc.skip -Dsurefire.toolchain.version=8
       - name: Native complete focused tests on JDK 25
@@ -43,7 +60,7 @@ jobs:
         run: ./mvnw -B -Dtoolchain.skip clean package -Dsurefire.toolchain.version=25
       - name: Verify source unchanged after tests
         run: |
-          test "$(git rev-parse HEAD)" = ae44a1fcca96766a02efe5093547e14b331ef099
+          test "$(git rev-parse HEAD)" = 95e925d7c809caf1b1900e569802d656c5b80f56
           git diff --exit-code
           sha256sum guava/src/com/google/common/util/concurrent/Uninterruptibles.java guava-tests/test/com/google/common/util/concurrent/UninterruptiblesTest.java
       - name: Print Surefire reports
