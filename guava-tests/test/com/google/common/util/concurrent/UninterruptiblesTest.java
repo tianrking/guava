@@ -46,6 +46,7 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.ScheduledExecutorService;
@@ -713,7 +714,7 @@ public class UninterruptiblesTest extends TestCase {
 
   public void testAwaitTerminationMinimumTimeoutInterrupted() throws Exception {
     CountDownLatch latch = new CountDownLatch(1);
-    ExecutorService executor = newFixedThreadPool(1);
+    ExecutorService executor = new ForkJoinPool(1);
     executor.execute(() -> awaitUninterruptibly(latch));
     executor.shutdown();
     try {
